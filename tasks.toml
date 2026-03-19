@@ -1,0 +1,198 @@
+# KMP Tasks Eval — task definitions
+#
+# Each [[tasks]] entry maps to one git commit from https://github.com/JetBrains/kotlinconf-app.
+# The agent starts at parent_sha and must reproduce the changes in commit_sha.
+#
+# Fields
+# ------
+# id             unique slug used as --tasks filter
+# name           human-readable label
+# category       upgrade | bugfix | refactor | feature
+# parent_sha     full SHA the agent's project is extracted from
+# commit_sha     short SHA the agent must reproduce
+# prompt         task description given to the agent
+# run_build      whether to run :app:shared:compileKotlinJvm after the agent (default: true)
+# min_similarity line-level similarity threshold per file (default: 0.70)
+# skip_patterns  list of path substrings to exclude from verification (default: [])
+
+[[tasks]]
+id          = "update-deps"
+name        = "Update Kotlin and Compose dependencies"
+category    = "upgrade"
+parent_sha  = "b648958697275d3142180d0595fcced2e38fba6a"
+commit_sha  = "0cf25cb"
+run_build   = true
+min_similarity = 0.85
+prompt = """
+Update the project dependencies in gradle/libs.versions.toml:
+- Kotlin: upgrade to 2.3.20
+- AndroidX Activity Compose: upgrade to 1.13.0
+- AndroidX Lifecycle: upgrade to 2.11.0-alpha01
+- AndroidX Navigation3: upgrade to 1.1.0-alpha04
+Also remove the explicit `androidx.core.ktx` dependency from \
+app/shared/build.gradle.kts — it is now provided transitively."""
+
+[[tasks]]
+id          = "partner-column-layout"
+name        = "Add missing Column layout in PartnerDetailScreen"
+category    = "bugfix"
+parent_sha  = "b2afe291d17fcb5a92346838e64ff47225d36d09"
+commit_sha  = "048ba61"
+run_build   = true
+min_similarity = 0.85
+prompt = """
+The PartnerDetailScreen is missing a Column layout wrapper around its content. \
+Wrap the NetworkImage, Spacer, and Text composables inside a Column so they \
+are arranged vertically. Add the necessary import for Column.
+File: app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/PartnerDetailScreen.kt"""
+
+[[tasks]]
+id          = "fix-db-migrations"
+name        = "Fix DB migrations for H2 compatibility"
+category    = "bugfix"
+parent_sha  = "4703b1f3e48271e6bb83886d2c1814f1361cdaa8"
+commit_sha  = "96b8b18"
+run_build   = false   # SQL-only changes; JVM compile not relevant
+min_similarity = 0.75
+prompt = """
+The SQL migration files in backend/src/main/resources/db/migrations/ \
+are not compatible with H2 (used for local development). Fix them:
+1. V001__initial_schema.sql: quote `timestamp` as "timestamp" wherever it is used as a column name.
+2. V002__add_year_and_signed_policies.sql: quote both `timestamp` and `year` as reserved keywords.
+3. V003__fix_table_name_casing.sql: the single-step rename from 'SignedPolicies' to 'signedpolicies' \
+fails in H2. Replace it with a two-step rename: first to a temporary name \
+(e.g. signedpolicies_migration_tmp), then to the final name signedpolicies."""
+
+[[tasks]]
+id          = "fix-theme-propagation"
+name        = "Fix theme change propagation"
+category    = "bugfix"
+parent_sha  = "d27f5d47a49e8c895d49f06f2857ac1bd9eb7ae9"
+commit_sha  = "f797c2e"
+run_build   = true
+min_similarity = 0.75
+prompt = """
+Theme changes are not being applied correctly. The LaunchedEffect that \
+calls the system theme change callback is in App.kt but should be in NavHost.kt \
+where the colors are actually available.
+Files:
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/App.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/NavHost.kt
+Move the LaunchedEffect into NavHost.kt and use `colors` as the effect key \
+rather than the raw `isDarkTheme` boolean."""
+
+[[tasks]]
+id          = "fix-bottom-insets"
+name        = "Fix bottom inset paddings on main screens"
+category    = "bugfix"
+parent_sha  = "2aafffef39255991ce66e0c6914b148ee25a6525"
+commit_sha  = "4432ffd"
+run_build   = true
+min_similarity = 0.75
+prompt = """
+The bottom navigation bar overlaps content on the main screens. \
+Add bottomInsetPadding() as contentPadding (or bottom padding) to the \
+scrollable containers on each of these screens:
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/GoldenKodeeScreen.kt — LazyVerticalStaggeredGrid
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/InfoScreen.kt — Column
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/MapScreen.kt — bottom button
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/ScheduleScreen.kt — LazyColumn
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/SpeakersScreen.kt — LazyGrid"""
+
+[[tasks]]
+id          = "single-backstack"
+name        = "Use single list instance for backstack"
+category    = "refactor"
+parent_sha  = "d9989040b2f2393b394bc01737628fe85d084405"
+commit_sha  = "a07978a"
+run_build   = true
+min_similarity = 0.75
+prompt = """
+The navigation backstack is recreated as a new list on every access, causing \
+unnecessary Compose recompositions. Refactor to use a single stable instance:
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/NavState.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/Navigator.kt
+Change currentBackstack in NavState to a mutableStateListOf(...) that is mutated \
+in place rather than replaced. Update topLevelRoute's setter to clear and re-fill \
+the list. Update Navigator.kt to reference state.currentBackstack directly."""
+
+[[tasks]]
+id          = "extract-golden-kodee"
+name        = "Extract RadialBackdrop composable"
+category    = "refactor"
+parent_sha  = "4432ffd0e4927f70e6cd7fdd1ae95c4f768994a0"
+commit_sha  = "ada22dc"
+run_build   = true
+min_similarity = 0.70
+prompt = """
+In GoldenKodeeScreen.kt, the radial backdrop is rendered inline using drawBehind. \
+Extract it into a separate composable function called RadialBackdrop, replacing the \
+drawBehind implementation with an Image composable that uses graphicsLayer for \
+transformations. Also increase the animation start delay from 300ms to 500ms.
+File: app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/GoldenKodeeScreen.kt"""
+
+[[tasks]]
+id          = "browser-navigation"
+name        = "Add browser navigation support"
+category    = "feature"
+parent_sha  = "a07978af0541a8de2bfb444068c221b9ffafb81b"
+commit_sha  = "b648958"
+run_build   = true
+min_similarity = 0.65
+prompt = """
+Add browser back/forward navigation support for the web target.
+1. Add the navigation3-browser dependency (version 0.3.1) for webMain only in \
+gradle/libs.versions.toml and app/shared/build.gradle.kts.
+2. Create app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/BrowserIntegration.kt \
+with an expect class or function.
+3. Create platform-specific actual implementations:
+   - src/webMain: real browser history integration via navigation3-browser
+   - src/androidMain, src/iosMain, src/jvmMain: no-op stubs
+4. In app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/NavHost.kt, \
+replace the existing TODO comment with a call to BrowserIntegration."""
+
+[[tasks]]
+id          = "feedback-form-redesign"
+name        = "Implement new feedback form design"
+category    = "feature"
+parent_sha  = "f73bda853e24d8df743edfa550322541b74ed368"
+commit_sha  = "474319a"
+run_build   = true
+min_similarity = 0.60
+# German translations are optional — only require English + Kotlin files
+skip_patterns = ["values-de/"]
+prompt = """
+Redesign the session feedback form. Key changes:
+1. Create app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/utils/NotificationBar.kt — \
+a composable notification banner that auto-dismisses after 5 seconds.
+2. In app/ui-components/src/commonMain/kotlin/org/jetbrains/kotlinconf/ui/components/FeedbackForm.kt, \
+add AnimatedContent that shows different Kodee emoji feedback per sentiment, \
+and add a 'Skip comment' button.
+3. Add the new string resources to \
+app/shared/src/commonMain/composeResources/values/strings.xml and \
+app/ui-components/src/commonMain/composeResources/values/strings.xml.
+4. Add mainBackgroundInverted color to \
+app/ui-components/src/commonMain/kotlin/org/jetbrains/kotlinconf/ui/theme/Colors.kt."""
+
+[[tasks]]
+id          = "golden-kodee-test-data"
+name        = "Add testing indicator and Golden Kodee fake data"
+category    = "feature"
+parent_sha  = "5b550d3144dc2de36491207d9a70f74f3fc327bd"
+commit_sha  = "14ba4b8"
+run_build   = true
+min_similarity = 0.55
+# This commit touches 35 files including platform DI wiring — skip platform stubs
+# and focus on the core shared files
+skip_patterns = ["androidApp/", "desktopApp/", "webApp/", "iosMain/", "jvmMain/", "webMain/"]
+prompt = """
+Add Golden Kodee award fake data and a testing indicator.
+1. Create app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/flags/FakeGoldenKodeeData.kt \
+with at least 2 award categories, each with nominees.
+2. Add a useFakeGoldenKodeeData boolean flag in \
+app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/flags/Flags.kt.
+3. Show a visible 'Testing' indicator badge at the top of the screen when the app \
+is running in a test/staging build (i.e. testing flag is on). \
+Add it to app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/NavHost.kt.
+4. Move Flags.kt and FlagsManager.kt to the org.jetbrains.kotlinconf.flags package \
+(they may currently be in a different package — adjust imports accordingly)."""
