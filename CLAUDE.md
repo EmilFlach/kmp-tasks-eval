@@ -1,6 +1,6 @@
 # kmp-tasks-eval
 
-Evaluation harness that runs AI agents on Kotlin Multiplatform coding tasks and measures how accurately they reproduce real commits from the [kotlinconf-app](https://github.com/JetBrains/kotlinconf-app) repo.
+Evaluation harness that runs AI agents on Kotlin Multiplatform coding tasks and measures how accurately they reproduce real commits from KMP sample repos (kotlinconf-app, jetcaster-kmp-migration, and others).
 
 ## Project layout
 
@@ -21,8 +21,9 @@ results/
 ## Running the eval
 
 ```bash
-# Setup (clone the sample project once)
-./run --setup
+# Setup (clone all repos referenced by the selected tasks)
+./run --setup                          # clones repos for the default task only
+./run --all-tasks --setup              # clones all repos (kotlinconf-app + jetcaster-kmp-migration)
 
 # Run default agent on first task
 ./run
@@ -48,7 +49,7 @@ Copy `.env.example` to `.env` and set:
 1. `git archive` extracts the project at `parent_sha` into a temp dir (no `.git`)
 2. Optional `task.setup()` mutates the project
 3. Agent edits files inside the temp dir
-4. JVM Gradle build: `./gradlew :app:shared:compileKotlinJvm --no-daemon --quiet`
+4. JVM Gradle build: `./gradlew <task.build_task> --no-daemon --quiet` (configurable per task)
 5. File-similarity verification compares agent output against `commit_sha` files
 6. LLM judge provides qualitative feedback (verdict: yes/partial/no)
 7. `passed = verify_passed AND (build_passed or build skipped)`
@@ -68,15 +69,21 @@ Add a `[[tasks]]` entry to `tasks.toml`:
 id          = "my-task"
 name        = "Human-readable name"
 category    = "feature"          # upgrade | bugfix | refactor | feature
+repo_url    = "https://github.com/owner/repo"  # omit to default to kotlinconf-app
 parent_sha  = "<full SHA>"       # agent starts here
 commit_sha  = "<short SHA>"      # agent must reproduce this
 run_build   = true
+build_task  = ":module:compileKotlinJvm"  # omit to default to :app:shared:compileKotlinJvm
 min_similarity = 0.70
 skip_patterns  = []              # path substrings to exclude from verification
 prompt      = """
 Task description given verbatim to the agent.
 """
 ```
+
+Repos are cloned into `--repos-dir` (default: `../` relative to this directory) as
+subdirectories named after the repo. Run `./run --tasks <id> --setup` to clone
+only the repos needed for specific tasks.
 
 ## Key implementation notes
 

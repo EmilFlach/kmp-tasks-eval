@@ -29,6 +29,9 @@ from typing import Callable, Optional
 
 _TOML_PATH = Path(__file__).parent / "tasks.toml"
 
+KOTLINCONF_REPO_URL = "https://github.com/JetBrains/kotlinconf-app"
+KOTLINCONF_BUILD_TASK = ":app:shared:compileKotlinJvm"
+
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -59,9 +62,11 @@ class Task:
     parent_sha: str     # Agent starts here
     commit_sha: str     # Agent must reproduce this commit
     prompt: str
-    verify: Callable[[Path, Path], VerificationResult]   # (project_dir, sample_repo)
+    verify: Callable[[Path, Path], VerificationResult]   # (project_dir, repo)
     run_build: bool = True    # Whether to run JVM compile after the agent runs
     setup: Optional[Callable[[Path], None]] = None
+    repo_url: str = KOTLINCONF_REPO_URL   # Which git repo to clone/extract from
+    build_task: str = KOTLINCONF_BUILD_TASK  # Gradle task for JVM compilation check
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +213,8 @@ def _load_tasks() -> list[Task]:
                 skip_patterns=d.get("skip_patterns") or None,
             ),
             run_build=d.get("run_build", True),
+            repo_url=d.get("repo_url", KOTLINCONF_REPO_URL),
+            build_task=d.get("build_task", KOTLINCONF_BUILD_TASK),
         ))
     return tasks
 

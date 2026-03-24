@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 _ENV_FILE = Path(__file__).parent / ".env"
 
 from agents import Agent, agents_from_env
-from evaluator import DEFAULT_SAMPLE_PROJECT, REPO_URL, TaskRunResult, clone_sample_project, run_all, JVM_BUILD_TASK
+from evaluator import DEFAULT_REPOS_DIR, TaskRunResult, clone_repos, run_all, repo_dir
 from reporter import generate_report
 from tasks import TASKS, TASKS_BY_ID, Task
 
@@ -168,16 +168,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--sample-project", type=Path, default=DEFAULT_SAMPLE_PROJECT,
-        help=f"Path to the local kotlinconf-app clone (default: {DEFAULT_SAMPLE_PROJECT})",
+        "--repos-dir", type=Path, default=DEFAULT_REPOS_DIR,
+        help=f"Directory containing cloned repos (default: {DEFAULT_REPOS_DIR}). "
+             "Each repo is expected as a subdirectory named after the repo.",
     )
     parser.add_argument(
         "--setup", action="store_true",
-        help=f"Clone {REPO_URL} into --sample-project path and exit",
+        help="Clone all repos needed by the selected tasks into --repos-dir and exit",
     )
     parser.add_argument(
         "--no-build", action="store_true",
-        help=f"Skip the JVM build step ({JVM_BUILD_TASK}). "
+        help="Skip the JVM build step. "
              "Useful for quick iteration; build is required for a result to count as passed.",
     )
     parser.add_argument(
@@ -205,10 +206,13 @@ async def async_main() -> int:
     args = parse_args()
 
     if args.setup:
-        if args.sample_project.exists():
-            print(f"Already exists: {args.sample_project}")
-        else:
-            clone_sample_project(args.sample_project)
+        # Resolve which tasks are selected so we only clone what's needed
+        setup_tasks = TASKS if args.all_tasks else [
+            TASKS_BY_ID[tid] for tid in args.tasks if tid in TASKS_BY_ID
+        ]
+        if not setup_tasks:
+            setup_tasks = TASKS
+        clone_repos(setup_tasks, args.repos_dir)
         return 0
 
     if args.list_tasks:
@@ -229,14 +233,23 @@ async def async_main() -> int:
             return 1
         selected_tasks = [TASKS_BY_ID[tid] for tid in args.tasks]
 
-    # Validate sample project
-    if not args.dry_run and not args.sample_project.exists():
-        print(
-            f"ERROR: kotlinconf-app repo not found at: {args.sample_project}\n"
-            "Run:  ./run --setup   to clone it automatically.",
-            file=sys.stderr,
-        )
-        return 1
+    # Validate that each required repo is present
+    if not args.dry_run:
+        missing = []
+        seen: set[str] = set()
+        for task in selected_tasks:
+            if task.repo_url not in seen:
+                seen.add(task.repo_url)
+                repo_path = repo_dir(args.repos_dir, task.repo_url)
+                if not repo_path.exists():
+                    missing.append(f"  {repo_path}  (from {task.repo_url})")
+        if missing:
+            print(
+                "ERROR: missing repo(s):\n" + "\n".join(missing) + "\n"
+                "Run:  ./run --setup   to clone them automatically.",
+                file=sys.stderr,
+            )
+            return 1
 
     # Resolve agents
     agent_filter = None if args.all_agents else args.agent
@@ -266,9 +279,9 @@ async def async_main() -> int:
         "with kotlin tool" if args.with_kotlin_tool else "without kotlin tool"
     )
     print(f"Kotlin tool  : {mode}")
-    print(f"JVM build    : {'SKIPPED (--no-build)' if args.no_build else JVM_BUILD_TASK}")
+    print(f"JVM build    : {'SKIPPED (--no-build)' if args.no_build else 'enabled (per-task build task)'}")
     print(f"LLM judge    : {'SKIPPED (--no-judge)' if args.no_judge else 'junie (sonnet)'}")
-    print(f"Sample proj  : {args.sample_project}")
+    print(f"Repos dir    : {args.repos_dir}")
     if args.dry_run:
         print("Mode         : DRY RUN")
     print("-" * 72)
@@ -283,7 +296,7 @@ async def async_main() -> int:
             _mock_results(agents, selected_tasks, args.runs, with_kotlin_tool=False)
             if args.dry_run
             else await run_all(
-                agents, selected_tasks, args.sample_project,
+                agents, selected_tasks, args.repos_dir,
                 n=args.runs, with_kotlin_tool=False, skip_build=skip_build,
                 skip_judge=skip_judge, on_result=callback,
             )
@@ -293,7 +306,7 @@ async def async_main() -> int:
             _mock_results(agents, selected_tasks, args.runs, with_kotlin_tool=True)
             if args.dry_run
             else await run_all(
-                agents, selected_tasks, args.sample_project,
+                agents, selected_tasks, args.repos_dir,
                 n=args.runs, with_kotlin_tool=True, skip_build=skip_build,
                 skip_judge=skip_judge, on_result=callback,
             )
@@ -308,7 +321,7 @@ async def async_main() -> int:
 
     else:
         all_results = await run_all(
-            agents, selected_tasks, args.sample_project,
+            agents, selected_tasks, args.repos_dir,
             n=args.runs, with_kotlin_tool=args.with_kotlin_tool,
             skip_build=skip_build, skip_judge=skip_judge, on_result=callback,
         )

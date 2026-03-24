@@ -27,27 +27,37 @@ from agents import Agent
 from judge import JudgeResult, run_judge
 from tasks import Task, VerificationResult
 
-REPO_URL = "https://github.com/JetBrains/kotlinconf-app"
+# Default directory that contains all cloned repos as subdirectories.
+# e.g. DEFAULT_REPOS_DIR/kotlinconf-app, DEFAULT_REPOS_DIR/jetcaster-kmp-migration
+DEFAULT_REPOS_DIR: Path = Path(__file__).parent.parent.parent
 
-DEFAULT_SAMPLE_PROJECT: Path = (
-    Path(__file__).parent.parent.parent / "kotlinconf-app"
-)
-
-# Gradle task that compiles only the JVM target of the shared KMP module.
-# Fast (~30-60s with warm cache), catches all Kotlin type/syntax errors.
-JVM_BUILD_TASK = ":app:shared:compileKotlinJvm"
 BUILD_TIMEOUT = 300   # seconds
 
 
 # ---------------------------------------------------------------------------
-# Project setup helpers
+# Repo helpers
 # ---------------------------------------------------------------------------
 
-def clone_sample_project(dest: Path) -> None:
-    """Full clone of the kotlinconf-app repo into dest."""
-    print(f"Cloning {REPO_URL} → {dest} …")
-    subprocess.run(["git", "clone", REPO_URL, str(dest)], check=True)
-    print("Clone complete.")
+def repo_dir(repos_dir: Path, repo_url: str) -> Path:
+    """Derive the local clone path for a repo from its URL."""
+    name = repo_url.rstrip("/").split("/")[-1]
+    return repos_dir / name
+
+
+def clone_repos(tasks: list[Task], repos_dir: Path) -> None:
+    """Clone all unique repos referenced by the given tasks."""
+    seen: set[str] = set()
+    for task in tasks:
+        if task.repo_url in seen:
+            continue
+        seen.add(task.repo_url)
+        dest = repo_dir(repos_dir, task.repo_url)
+        if dest.exists():
+            print(f"Already exists: {dest}")
+        else:
+            print(f"Cloning {task.repo_url} → {dest} …")
+            subprocess.run(["git", "clone", task.repo_url, str(dest)], check=True)
+            print("Clone complete.")
 
 
 def _extract_at_sha(repo: Path, sha: str, dest: Path) -> None:
@@ -76,13 +86,13 @@ def _extract_at_sha(repo: Path, sha: str, dest: Path) -> None:
 # JVM build
 # ---------------------------------------------------------------------------
 
-async def _run_jvm_build(project_dir: Path) -> tuple[bool, str]:
+async def _run_jvm_build(project_dir: Path, build_task: str) -> tuple[bool, str]:
     """
     Run the JVM Kotlin compilation in project_dir.
     Returns (passed, output).
     """
     proc = await asyncio.create_subprocess_exec(
-        "./gradlew", JVM_BUILD_TASK, "--no-daemon", "--quiet",
+        "./gradlew", build_task, "--no-daemon", "--quiet",
         cwd=str(project_dir),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
@@ -140,13 +150,14 @@ class TaskRunResult:
 async def run_task_once(
     agent: Agent,
     task: Task,
-    sample_repo: Path,
+    repos_dir: Path,
     run_number: int,
     with_kotlin_tool: bool = False,
     skip_build: bool = False,
     skip_judge: bool = False,
     on_result: "Callable[[TaskRunResult], None] | None" = None,
 ) -> TaskRunResult:
+    sample_repo = repo_dir(repos_dir, task.repo_url)
     with tempfile.TemporaryDirectory(prefix="kmp_eval_") as tmpdir:
         project_copy = Path(tmpdir) / "project"
 
@@ -173,7 +184,7 @@ async def run_task_once(
         build_passed: bool | None = None
         build_output = ""
         if not error and task.run_build and not skip_build:
-            build_passed, build_output = await _run_jvm_build(project_copy)
+            build_passed, build_output = await _run_jvm_build(project_copy, task.build_task)
 
         # 5. File-similarity verification
         if error:
@@ -242,7 +253,7 @@ async def run_task_once(
 async def run_task_n_times(
     agent: Agent,
     task: Task,
-    sample_repo: Path,
+    repos_dir: Path,
     n: int,
     with_kotlin_tool: bool = False,
     skip_build: bool = False,
@@ -252,7 +263,7 @@ async def run_task_n_times(
     results = []
     for i in range(1, n + 1):
         r = await run_task_once(
-            agent, task, sample_repo, i, with_kotlin_tool, skip_build, skip_judge, on_result
+            agent, task, repos_dir, i, with_kotlin_tool, skip_build, skip_judge, on_result
         )
         results.append(r)
     return results
@@ -265,7 +276,7 @@ async def run_task_n_times(
 async def run_all(
     agents: list[Agent],
     tasks: list[Task],
-    sample_repo: Path,
+    repos_dir: Path,
     n: int = 1,
     with_kotlin_tool: bool = False,
     skip_build: bool = False,
@@ -278,7 +289,7 @@ async def run_all(
         results: list[TaskRunResult] = []
         for task in tasks:
             task_results = await run_task_n_times(
-                agent, task, sample_repo, n, with_kotlin_tool, skip_build, skip_judge, on_result
+                agent, task, repos_dir, n, with_kotlin_tool, skip_build, skip_judge, on_result
             )
             results.extend(task_results)
         return results

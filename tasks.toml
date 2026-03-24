@@ -1,6 +1,6 @@
 # KMP Tasks Eval — task definitions
 #
-# Each [[tasks]] entry maps to one git commit from https://github.com/JetBrains/kotlinconf-app.
+# Each [[tasks]] entry maps to one git commit from a KMP sample repo.
 # The agent starts at parent_sha and must reproduce the changes in commit_sha.
 #
 # Fields
@@ -11,7 +11,9 @@
 # parent_sha     full SHA the agent's project is extracted from
 # commit_sha     short SHA the agent must reproduce
 # prompt         task description given to the agent
-# run_build      whether to run :app:shared:compileKotlinJvm after the agent (default: true)
+# run_build      whether to run the JVM build step after the agent (default: true)
+# build_task     Gradle task for JVM compile check (default: :app:shared:compileKotlinJvm)
+# repo_url       git repo to clone/extract from (default: https://github.com/JetBrains/kotlinconf-app)
 # min_similarity line-level similarity threshold per file (default: 0.70)
 # skip_patterns  list of path substrings to exclude from verification (default: [])
 
@@ -465,3 +467,133 @@ themselves.
 (the old single-platform preview helper it replaces).
 4. In Colors.kt, expose an `isDark` Boolean property on the Colors class derived \
 from the background luminance, so previews can introspect the theme."""
+
+# =============================================================================
+# Jetcaster KMP migration tasks
+# https://github.com/kotlin-hands-on/jetcaster-kmp-migration
+# =============================================================================
+
+[[tasks]]
+id          = "jetcaster-replace-rome"
+name        = "Replace Android-only ROME library with multiplatform rssparser"
+category    = "Managing Dependencies"
+repo_url    = "https://github.com/kotlin-hands-on/jetcaster-kmp-migration"
+parent_sha  = "b9ed545269fe852d3d089cbe94315347c0238fa0"
+commit_sha  = "703d670"
+run_build   = false   # core/data is Android-only at this point
+min_similarity = 0.80
+prompt = """
+The podcast feed parser currently uses the ROME library, which is Android/JVM-only \
+and will block multiplatform migration. Replace it with the multiplatform \
+`io.github.rssparser:rssparser` library.
+1. In gradle/libs.versions.toml, remove the `rome` version and library entries \
+and add `rssparser = "6.0.9"` plus \
+`rssparser = { module = "io.github.rssparser:rssparser", version.ref = "rssparser" }`.
+2. In core/data/build.gradle.kts, replace the ROME dependency with \
+`implementation(libs.rssparser)`.
+3. Delete \
+core/data/src/main/java/com/example/jetcaster/core/data/network/OkHttpExtensions.kt \
+— it provided a ROME-specific response-body extension that is no longer needed.
+4. In core/data/src/main/java/com/example/jetcaster/core/data/network/PodcastFetcher.kt, \
+replace the ROME-based feed parsing with rssparser's `RssParser().getRssChannel(url)` \
+(or equivalent suspend call) and adapt the data mapping accordingly.
+5. Update \
+core/data/src/main/java/com/example/jetcaster/core/data/di/DataDiModule.kt \
+to remove any ROME-specific bindings."""
+
+[[tasks]]
+id          = "jetcaster-create-kmp-ui-module"
+name        = "Create the sharedUi Kotlin Multiplatform module"
+category    = "Managing Dependencies"
+repo_url    = "https://github.com/kotlin-hands-on/jetcaster-kmp-migration"
+parent_sha  = "4aa92e3f38d06aa64444163d865753e47e9b2a97"
+commit_sha  = "a48bb12"
+run_build   = false   # only build config added, no Kotlin source yet
+min_similarity = 0.85
+prompt = """
+Create a new Kotlin Multiplatform module called `sharedUi` that will hold \
+shared Compose UI code for Android, iOS, and JVM/Desktop targets.
+1. In gradle/libs.versions.toml add version entries and library aliases for \
+the Ktor, Compose Navigation, and Material3 Adaptive libraries needed by the \
+shared UI module.
+2. In settings.gradle.kts, add `include(":sharedUi")` so Gradle discovers \
+the new module.
+3. Create sharedUi/build.gradle.kts with a `kotlin { multiplatform { ... } }` \
+block that declares Android, iosX64, iosArm64, iosSimulatorArm64, and jvm \
+targets, adds the necessary Compose Multiplatform and coroutines dependencies, \
+and configures the Android namespace/compileSdk/minSdk."""
+
+[[tasks]]
+id          = "jetcaster-migrate-theme"
+name        = "Move Theme to shared module with platform-specific actuals"
+category    = "Building"
+repo_url    = "https://github.com/kotlin-hands-on/jetcaster-kmp-migration"
+parent_sha  = "801f044e56224398d812eb8fd1c1d46b0e9b0087"
+commit_sha  = "07be9bb"
+build_task  = ":sharedUi:compileKotlinJvm"
+run_build   = true
+min_similarity = 0.75
+prompt = """
+Move the Jetcaster theme into the shared multiplatform module so it can be \
+used from all targets.
+1. Delete mobile/src/main/java/com/example/jetcaster/ui/theme/Color.kt — \
+its content moves to the shared module.
+2. Create sharedUi/src/commonMain/kotlin/com/example/jetcaster/ui/theme/Color.kt \
+with the shared color definitions.
+3. Create sharedUi/src/commonMain/kotlin/com/example/jetcaster/ui/theme/Theme.kt \
+as an expect declaration (or common implementation) for the app theme composable.
+4. Create platform-specific actuals:
+   - sharedUi/src/androidMain/kotlin/com/example/jetcaster/ui/theme/Theme.android.kt
+   - sharedUi/src/iosMain/kotlin/com/example/jetcaster/ui/theme/Theme.ios.kt
+   - sharedUi/src/jvmMain/kotlin/com/example/jetcaster/ui/theme/Theme.jvm.kt
+5. Update sharedUi/src/commonMain/kotlin/com/example/jetcaster/shared/ui/EpisodeListItem.kt \
+to import the theme from the new shared location instead of the mobile module."""
+
+[[tasks]]
+id          = "jetcaster-migrate-navigation"
+name        = "Move navigation state to shared module"
+category    = "Building"
+repo_url    = "https://github.com/kotlin-hands-on/jetcaster-kmp-migration"
+parent_sha  = "ad0012becc527c1c8cb354bb73b5da9741733a1f"
+commit_sha  = "2e0107d"
+build_task  = ":sharedUi:compileKotlinJvm"
+run_build   = true
+min_similarity = 0.75
+skip_patterns = ["mobile/"]   # focus on the shared-side changes
+prompt = """
+Move the navigation graph state out of the Android-only mobile module into \
+the shared `sharedUi` module so all targets can use it.
+1. Create sharedUi/src/commonMain/kotlin/com/example/jetcaster/ui/JetcasterAppState.kt \
+holding the shared navigation state (route definitions, current-back-stack state, \
+and navigation helpers).
+2. Update mobile/src/main/java/com/example/jetcaster/ui/JetcasterApp.kt to \
+delegate to the new shared JetcasterAppState rather than managing navigation \
+state inline.
+3. Update mobile/src/main/java/com/example/jetcaster/ui/MainActivity.kt \
+to use the shared navigation entry point.
+4. Update mobile/src/main/java/com/example/jetcaster/ui/player/PlayerScreen.kt \
+to remove any navigation logic that has moved to the shared module."""
+
+[[tasks]]
+id          = "jetcaster-add-desktop-target"
+name        = "Add JVM/Desktop target to sharedUi"
+category    = "Building"
+repo_url    = "https://github.com/kotlin-hands-on/jetcaster-kmp-migration"
+parent_sha  = "48f13acc02d3630871e3671114f736cb3db51424"
+commit_sha  = "60d5a2f"
+build_task  = ":sharedUi:compileKotlinJvm"
+run_build   = true
+min_similarity = 0.70
+skip_patterns = ["assets/"]   # binary logo.gif not text-verifiable
+prompt = """
+Add a JVM/Desktop entry point to the sharedUi module so the app can run \
+as a desktop Compose application.
+1. In sharedUi/build.gradle.kts, add a native distributions block under \
+`compose.desktop` that packages the app as Dmg (macOS), Msi (Windows), \
+and Deb (Linux). Set the main class to the desktop entry point.
+2. Create sharedUi/src/jvmMain/kotlin/com/example/jetcaster/shared/main.kt \
+— the desktop entry point using `application { Window(...) { JetcasterApp() } }`.
+3. Create sharedUi/src/jvmMain/kotlin/com/example/jetcaster/shared/di/SharedUIModule.jvm.kt \
+with the JVM Koin module (Coil image loader wired for JVM).
+4. Create sharedUi/src/jvmMain/kotlin/com/example/jetcaster/ui/player/PlayerScreenDisplayStrategy.kt \
+as the JVM-specific implementation of the player display strategy."""
