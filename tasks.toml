@@ -47,23 +47,6 @@ are arranged vertically. Add the necessary import for Column.
 File: app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/PartnerDetailScreen.kt"""
 
 [[tasks]]
-id          = "fix-db-migrations"
-name        = "Fix DB migrations for H2 compatibility"
-category    = "bugfix"
-parent_sha  = "4703b1f3e48271e6bb83886d2c1814f1361cdaa8"
-commit_sha  = "96b8b18"
-run_build   = false   # SQL-only changes; JVM compile not relevant
-min_similarity = 0.75
-prompt = """
-The SQL migration files in backend/src/main/resources/db/migrations/ \
-are not compatible with H2 (used for local development). Fix them:
-1. V001__initial_schema.sql: quote `timestamp` as "timestamp" wherever it is used as a column name.
-2. V002__add_year_and_signed_policies.sql: quote both `timestamp` and `year` as reserved keywords.
-3. V003__fix_table_name_casing.sql: the single-step rename from 'SignedPolicies' to 'signedpolicies' \
-fails in H2. Replace it with a two-step rename: first to a temporary name \
-(e.g. signedpolicies_migration_tmp), then to the final name signedpolicies."""
-
-[[tasks]]
 id          = "fix-theme-propagation"
 name        = "Fix theme change propagation"
 category    = "bugfix"
