@@ -1,5 +1,5 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 # Run the eval using the project venv — no manual activation needed.
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="${SCRIPT_DIR}/../.venv/bin/python3"
 exec "$PYTHON" "${SCRIPT_DIR}/main.py" "$@"
