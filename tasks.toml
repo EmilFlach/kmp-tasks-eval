@@ -7,7 +7,7 @@
 # ------
 # id             unique slug used as --tasks filter
 # name           human-readable label
-# category       upgrade | bugfix | refactor | feature
+# category       Managing Dependencies | Building | Testing | Optimizing | Distributing | Maintaining
 # parent_sha     full SHA the agent's project is extracted from
 # commit_sha     short SHA the agent must reproduce
 # prompt         task description given to the agent
@@ -18,7 +18,7 @@
 [[tasks]]
 id          = "update-deps"
 name        = "Update Kotlin and Compose dependencies"
-category    = "upgrade"
+category    = "Managing Dependencies"
 parent_sha  = "b648958697275d3142180d0595fcced2e38fba6a"
 commit_sha  = "0cf25cb"
 run_build   = true
@@ -35,7 +35,7 @@ app/shared/build.gradle.kts — it is now provided transitively."""
 [[tasks]]
 id          = "partner-column-layout"
 name        = "Add missing Column layout in PartnerDetailScreen"
-category    = "bugfix"
+category    = "Building"
 parent_sha  = "b2afe291d17fcb5a92346838e64ff47225d36d09"
 commit_sha  = "048ba61"
 run_build   = true
@@ -49,7 +49,7 @@ File: app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/PartnerD
 [[tasks]]
 id          = "fix-theme-propagation"
 name        = "Fix theme change propagation"
-category    = "bugfix"
+category    = "Building"
 parent_sha  = "d27f5d47a49e8c895d49f06f2857ac1bd9eb7ae9"
 commit_sha  = "f797c2e"
 run_build   = true
@@ -67,7 +67,7 @@ rather than the raw `isDarkTheme` boolean."""
 [[tasks]]
 id          = "fix-bottom-insets"
 name        = "Fix bottom inset paddings on main screens"
-category    = "bugfix"
+category    = "Building"
 parent_sha  = "2aafffef39255991ce66e0c6914b148ee25a6525"
 commit_sha  = "4432ffd"
 run_build   = true
@@ -85,7 +85,7 @@ scrollable containers on each of these screens:
 [[tasks]]
 id          = "single-backstack"
 name        = "Use single list instance for backstack"
-category    = "refactor"
+category    = "Building"
 parent_sha  = "d9989040b2f2393b394bc01737628fe85d084405"
 commit_sha  = "a07978a"
 run_build   = true
@@ -102,7 +102,7 @@ the list. Update Navigator.kt to reference state.currentBackstack directly."""
 [[tasks]]
 id          = "extract-golden-kodee"
 name        = "Extract RadialBackdrop composable"
-category    = "refactor"
+category    = "Building"
 parent_sha  = "4432ffd0e4927f70e6cd7fdd1ae95c4f768994a0"
 commit_sha  = "ada22dc"
 run_build   = true
@@ -117,7 +117,7 @@ File: app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/GoldenKo
 [[tasks]]
 id          = "browser-navigation"
 name        = "Add browser navigation support"
-category    = "feature"
+category    = "Building"
 parent_sha  = "a07978af0541a8de2bfb444068c221b9ffafb81b"
 commit_sha  = "b648958"
 run_build   = true
@@ -137,7 +137,7 @@ replace the existing TODO comment with a call to BrowserIntegration."""
 [[tasks]]
 id          = "feedback-form-redesign"
 name        = "Implement new feedback form design"
-category    = "feature"
+category    = "Building"
 parent_sha  = "f73bda853e24d8df743edfa550322541b74ed368"
 commit_sha  = "474319a"
 run_build   = true
@@ -160,7 +160,7 @@ app/ui-components/src/commonMain/kotlin/org/jetbrains/kotlinconf/ui/theme/Colors
 [[tasks]]
 id          = "golden-kodee-test-data"
 name        = "Add testing indicator and Golden Kodee fake data"
-category    = "feature"
+category    = "Building"
 parent_sha  = "5b550d3144dc2de36491207d9a70f74f3fc327bd"
 commit_sha  = "14ba4b8"
 run_build   = true
@@ -179,3 +179,289 @@ is running in a test/staging build (i.e. testing flag is on). \
 Add it to app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/navigation/NavHost.kt.
 4. Move Flags.kt and FlagsManager.kt to the org.jetbrains.kotlinconf.flags package \
 (they may currently be in a different package — adjust imports accordingly)."""
+
+[[tasks]]
+id          = "web-platform-dependency"
+name        = "Add kotlin-browser dependency to webMain"
+category    = "Managing Dependencies"
+parent_sha  = "62d4cc73a81156b4fe7ae8f0b8a2c63747d82cfd"
+commit_sha  = "b46c4705"
+run_build   = true
+min_similarity = 0.75
+prompt = """
+Add the `org.jetbrains.kotlin-wrappers:kotlin-browser` library (version 2026.3.3) \
+as a platform-native dependency for the web target. This library provides Kotlin \
+wrappers for browser APIs, replacing manual external declarations.
+1. Add version `kotlinBrowser = "2026.3.3"` and library alias \
+`kotlin-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlinBrowser" }` \
+to gradle/libs.versions.toml.
+2. Add `implementation(libs.kotlin.browser)` to the webMain dependencies block \
+in app/shared/build.gradle.kts.
+3. Delete app/shared/src/webMain/kotlin/org/jetbrains/kotlinconf/utils/Notification.kt \
+— its external declarations are now provided by kotlin-browser.
+4. Update app/shared/src/webMain/kotlin/org/jetbrains/kotlinconf/MapHandler.web.kt \
+to remove the manual cast and use the browser library's window reference directly.
+5. Update app/shared/src/webMain/kotlin/org/jetbrains/kotlinconf/ServiceWorkerLocalNotificationService.kt \
+to use the Notification type from kotlin-browser instead of the deleted local declaration."""
+
+[[tasks]]
+id          = "alarm-permission-android-s"
+name        = "Fix exact-alarm permission handling for Android S"
+category    = "Building"
+parent_sha  = "2aaa1502e1029e32dace6594f704b89f8f0463e5"
+commit_sha  = "9b792293"
+run_build   = false   # androidMain only; JVM compile not relevant
+min_similarity = 0.80
+prompt = """
+On Android S (API 31–32) exact alarms require the user-revocable \
+`SCHEDULE_EXACT_ALARM` permission, whereas on API 33+ the automatically-granted \
+`USE_EXACT_ALARM` is used. Fix the notification service to handle both cases.
+Files:
+  shared/src/androidMain/AndroidManifest.xml
+  shared/src/androidMain/kotlin/org/jetbrains/kotlinconf/AndroidLocalNotificationService.kt
+Changes:
+1. Add `<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>` \
+to the manifest (alongside the existing USE_EXACT_ALARM entry).
+2. Add a private `getRelevantAlarmPermission(): String?` helper that returns \
+`USE_EXACT_ALARM` for API 33+, `SCHEDULE_EXACT_ALARM` for API 31–32, and null for older.
+3. In `requestPermission()`, replace the hardcoded permissions array with \
+`listOfNotNull(POST_NOTIFICATIONS, getRelevantAlarmPermission())`.
+4. In the alarm scheduling code, replace the hardcoded `USE_EXACT_ALARM` check \
+with a call to `getRelevantAlarmPermission()`, only skipping if it is non-null \
+and not granted."""
+
+[[tasks]]
+id          = "dark-mode-resources"
+name        = "Fix dark-mode resource loading in Compose Multiplatform"
+category    = "Building"
+parent_sha  = "f3b3da84e45b80ce6738a591db96e62db492be2b"
+commit_sha  = "a3d286a5"
+run_build   = true
+min_similarity = 0.80
+prompt = """
+Compose Multiplatform resolves dark-mode resources by name suffix (`_dark`) rather \
+than by directory (`drawable-dark/`). Fix three screens that load the wrong image \
+in dark mode.
+1. Rename `shared/src/commonMain/composeResources/drawable-dark/kotlinconf_by_jetbrains.xml` \
+to `shared/src/commonMain/composeResources/drawable/kotlinconf_by_jetbrains_dark.xml` \
+(move it out of the drawable-dark subfolder).
+2. In AboutConference.kt, import `kotlinconf_by_jetbrains_dark` and change the Image \
+to use `painterResource(if (KotlinConfTheme.colors.isDark) Res.drawable.kotlinconf_by_jetbrains_dark \
+else Res.drawable.kotlinconf_by_jetbrains)`.
+3. In InfoScreen.kt, apply the same fix for the `vectorResource(...)` call that \
+renders the same logo.
+4. In MapScreen.kt, replace `isSystemInDarkTheme()` with `KotlinConfTheme.colors.isDark` \
+in the `Floor.resource` property getter and remove the now-unused `isSystemInDarkTheme` import."""
+
+[[tasks]]
+id          = "storage-migration-test"
+name        = "Add unit tests for storage migration logic"
+category    = "Testing"
+parent_sha  = "031d8e06d7885455da9a2256213d727f245f88d1"
+commit_sha  = "b2ae14b4"
+run_build   = true
+min_similarity = 0.70
+prompt = """
+Add JVM-runnable common tests that verify the storage migration logic, \
+and run them in CI.
+1. In gradle/libs.versions.toml add a `kotlin-test` library alias pointing to \
+`org.jetbrains.kotlin:kotlin-test` at the existing kotlin version.
+2. In shared/build.gradle.kts add `commonTest.dependencies { implementation(libs.kotlin.test) }`.
+3. In MultiplatformSettingsStorage.kt change `fun ensureCurrentVersion()` from \
+`private` to `internal` so tests can call it directly.
+4. Create `shared/src/commonTest/kotlin/org/jetbrains/kotlinconf/storage/MultiplatformSettingsStorageMigrationTest.kt` \
+with tests covering at least: migration from the previous storage version removes \
+stale keys while preserving the current version key; being already at the current \
+version is a no-op; an unknown future version wipes all data and resets to the \
+current version.
+5. In .github/workflows/build-all.yml add a `Run JVM tests` step \
+(`./gradlew :shared:jvmTest`) after the existing desktop-jar step."""
+
+[[tasks]]
+id          = "lifecycle-aware-state"
+name        = "Replace collectAsState with collectAsStateWithLifecycle"
+category    = "Optimizing"
+parent_sha  = "f82095c192ce7e238784c988c0709c504c819a08"
+commit_sha  = "a808608b"
+run_build   = true
+min_similarity = 0.80
+prompt = """
+`collectAsState()` keeps collecting a StateFlow even when the app is in the \
+background, wasting resources and risking memory leaks on Android. \
+Replace every occurrence with `collectAsStateWithLifecycle()` from the \
+`androidx.lifecycle.compose` library.
+In each of the files below, replace the `collectAsState()` call(s) with \
+`collectAsStateWithLifecycle()` and update the import accordingly:
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/AboutConference.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/AppPrivacyNoticePrompt.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/LicenseScreens.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/NewsDetailScreen.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/NewsListScreen.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/ScheduleScreen.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/SessionScreen.kt
+  app/shared/src/commonMain/kotlin/org/jetbrains/kotlinconf/screens/SpeakersScreen.kt"""
+
+[[tasks]]
+id          = "enable-r8-minification"
+name        = "Enable R8 minification for Android release builds"
+category    = "Optimizing"
+parent_sha  = "d6312845daec799e1bb45dc2a174bd50af9d2a44"
+commit_sha  = "008473e5"
+run_build   = true
+min_similarity = 0.85
+prompt = """
+Enable R8 code shrinking for Android release builds to reduce APK size.
+1. In app/androidApp/build.gradle.kts, change `isMinifyEnabled = false` to \
+`isMinifyEnabled = true` in the release build type. The existing proguardFiles \
+block already references the right ProGuard configuration so no rules file \
+changes are needed.
+2. R8 with strict mode will warn about the MainActivity class not being \
+instantiable via reflection. Suppress this false-positive by:
+   a. Adding the `xmlns:tools="http://schemas.android.com/tools"` namespace to \
+the root `<manifest>` element in app/androidApp/src/main/AndroidManifest.xml.
+   b. Adding `tools:ignore="Instantiatable"` to the `<activity>` element for \
+MainActivity."""
+
+[[tasks]]
+id          = "enable-build-caching"
+name        = "Enable Gradle Configuration Cache and Build Cache"
+category    = "Optimizing"
+parent_sha  = "9802ef1e501215301a42f12db92c896c79780ac0"
+commit_sha  = "79f2fa83"
+run_build   = true
+min_similarity = 0.80
+prompt = """
+Enable Gradle Configuration Cache (GCC) and the local Build Cache to speed up \
+incremental builds and Compose Hot Reload.
+1. In gradle.properties add these five properties:
+   org.gradle.configuration-cache=true
+   org.gradle.configuration-cache.problems=warn
+   org.gradle.configuration-cache.parallel=true
+   org.gradle.caching=true
+   org.gradle.parallel=true
+2. The Configuration Cache does not allow lambda closures to capture \
+`project` references directly. Fix the incompatibility in shared/build.gradle.kts: \
+in the wasmJs browser devServer configuration block, extract \
+`project.projectDir.path` and `project.rootDir.path` into local `val` \
+variables before the lambda, then reference those local variables inside the \
+`static` list's `add()` calls instead of the project references."""
+
+[[tasks]]
+id          = "prepare-release"
+name        = "Add automated prepareRelease Gradle task"
+category    = "Distributing"
+parent_sha  = "3316772d53b78f6309e14a98c835507deaa63de2"
+commit_sha  = "4fdcf4ac"
+run_build   = true
+min_similarity = 0.55
+skip_patterns = ["CHANGELOG.md"]
+prompt = """
+Extract version-management and release-preparation logic from the root \
+build.gradle.kts into a dedicated script file, and implement a \
+`prepareRelease` Gradle task that bumps version numbers across all platforms.
+1. Create gradle/releases.gradle.kts. In it, implement two tasks:
+   - `prepareRelease` — reads the current version name from \
+app/shared/src/commonMain/composeResources/values/version.xml, increments \
+the version code by 1, writes the new version back to version.xml, updates \
+the versionCode/versionName in app/androidApp/build.gradle.kts, updates \
+CURRENT_PROJECT_VERSION / BUNDLE_VERSION in \
+app/iosApp/KotlinConf.xcodeproj/project.pbxproj, updates CFBundleVersion / \
+CFBundleShortVersionString in app/iosApp/iosApp/Info.plist, and updates \
+CHANGELOG.md to replace the "Unreleased" section header with the new version \
+and today's date.
+   - `prepareReleaseDraft` — same as above but targets a separate draft section.
+2. At the bottom of the root build.gradle.kts, remove any inline version-bump \
+code and apply the new script: `apply(from = "gradle/releases.gradle.kts")`.
+3. Add an initial `## Unreleased` section to CHANGELOG.md."""
+
+[[tasks]]
+id          = "platform-logger"
+name        = "Refactor Logger to DI-injected platform implementations"
+category    = "Maintaining"
+parent_sha  = "56453ad8257c01bb93496f17138eb1c7909f69c3"
+commit_sha  = "ff02e347"
+run_build   = true
+min_similarity = 0.70
+prompt = """
+The current `MobileLogger` uses expect/actual and is not injectable. Refactor \
+it into a proper `Logger` interface in commonMain with platform-specific \
+implementations wired through DI (Koin).
+1. Delete the old MobileLogger files:
+   shared/src/commonMain/.../utils/MobileLogger.kt
+   shared/src/androidMain/.../utils/MobileLogger.android.kt
+   shared/src/iosMain/.../utils/MobileLogger.ios.kt
+   shared/src/jvmMain/.../utils/MobileLogger.jvm.kt
+   shared/src/webMain/.../utils/Logger.web.kt
+2. Create shared/src/commonMain/.../utils/Logger.kt — an interface with \
+`fun log(tag: String, message: () -> String)` and a no-op singleton default.
+3. Create platform loggers (each implementing Logger):
+   AndroidLogger.kt (androidMain) — uses android.util.Log
+   IOSLogger.kt (iosMain) — uses platform.Foundation.NSLog
+   JvmLogger.kt (jvmMain) — uses println / java.util.logging
+   WebLogger.kt (webMain) — uses console.log
+4. Register each logger as a singleton in its platform DI module \
+(platformModule.android.kt, main.ios.kt, main.kt for JVM, platformModule for web).
+5. Update App.kt and APIClient.kt to obtain Logger via Koin injection \
+instead of constructing MobileLogger directly."""
+
+[[tasks]]
+id          = "feature-flag-ripple"
+name        = "Add per-platform feature flag to disable ripples on iOS"
+category    = "Maintaining"
+parent_sha  = "3316772d53b78f6309e14a98c835507deaa63de2"
+commit_sha  = "e5f2d9c4"
+run_build   = true
+min_similarity = 0.85
+prompt = """
+Compose ripple effects look out of place on iOS. Add a feature flag to \
+KotlinConfTheme so ripples can be disabled on specific platforms.
+1. In Flags.kt, add `val rippleEnabled: Boolean = true` to the Flags data class.
+2. In shared/src/iosMain/.../main.ios.kt, add `rippleEnabled = false` to the \
+Flags(...) instance passed to initApp().
+3. In ui-components/.../ui/theme/KotlinConfTheme.kt:
+   a. Add a private `NoIndication` object that implements `Indication` with a \
+no-op `rememberUpdatedInteractionSource` (simply `return object : Indication {}`).
+   b. Add a `rippleEnabled: Boolean = true` parameter to the `KotlinConfTheme()` \
+composable.
+   c. Change `LocalIndication provides ripple()` to \
+`LocalIndication provides if (rippleEnabled) ripple() else NoIndication`.
+4. In shared/src/commonMain/.../App.kt, pass \
+`rippleEnabled = LocalFlags.current.rippleEnabled` to the `KotlinConfTheme()` call."""
+
+[[tasks]]
+id          = "multipreview-annotations"
+name        = "Add multi-preview annotation for UI components"
+category    = "Testing"
+parent_sha  = "22f565bd56a81013f3d2f3f089862c2510598802"
+commit_sha  = "c9b1f9ba"
+run_build   = true
+min_similarity = 0.65
+# Focus on the infrastructure; skip the mechanical per-component replacements
+skip_patterns = [
+  "ui/components/Action", "ui/components/Button", "ui/components/CardTag",
+  "ui/components/DayHeader", "ui/components/Divider", "ui/components/ErrorLoading",
+  "ui/components/FeedbackForm", "ui/components/Filters", "ui/components/FiltersTag",
+  "ui/components/HeaderToggle", "ui/components/Icon", "ui/components/Kodee",
+  "ui/components/Large", "ui/components/Main", "ui/components/Now",
+  "ui/components/Overlay", "ui/components/Page", "ui/components/Partner",
+  "ui/components/Paragraph", "ui/components/Search", "ui/components/Section",
+  "ui/components/Service", "ui/components/Settings", "ui/components/Speaker",
+  "ui/components/Switcher", "ui/components/TalkCard", "ui/components/Toggle",
+  "ui/components/Tooltip", "ui/components/Top", "ui/components/Ripple",
+]
+prompt = """
+Create a `@KotlinConfPreviews` multi-preview annotation that combines several \
+`@Preview` configurations (phone light, phone dark, tablet) so a single \
+annotation previews all variants at once.
+1. Create ui-components/src/commonMain/kotlin/org/jetbrains/kotlinconf/ui/utils/MultiPreviews.kt \
+with a `@KotlinConfPreviews` typealias or annotation class that stacks \
+@Preview(name="Phone Light"), @Preview(name="Phone Dark", uiMode=UI_MODE_NIGHT_YES), \
+and @Preview(name="Tablet", device=Devices.TABLET) annotations.
+2. Create ui-components/src/commonMain/kotlin/org/jetbrains/kotlinconf/ui/theme/PreviewHelper.kt \
+— a `@KotlinConfPreviews`-annotated wrapper composable `KotlinConfPreview` that \
+wraps content in `KotlinConfTheme` so preview functions don't need to do it \
+themselves.
+3. Delete ui-components/src/commonMain/kotlin/org/jetbrains/kotlinconf/ui/theme/PreviewUtil.kt \
+(the old single-platform preview helper it replaces).
+4. In Colors.kt, expose an `isDark` Boolean property on the Colors class derived \
+from the background luminance, so previews can introspect the theme."""
