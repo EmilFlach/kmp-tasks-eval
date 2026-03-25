@@ -48,6 +48,8 @@ def clone_repos(tasks: list[Task], repos_dir: Path) -> None:
     """Clone all unique repos referenced by the given tasks."""
     seen: set[str] = set()
     for task in tasks:
+        if not task.repo_url:  # generation tasks have no repo to clone
+            continue
         if task.repo_url in seen:
             continue
         seen.add(task.repo_url)
@@ -157,12 +159,22 @@ async def run_task_once(
     skip_judge: bool = False,
     on_result: "Callable[[TaskRunResult], None] | None" = None,
 ) -> TaskRunResult:
-    sample_repo = repo_dir(repos_dir, task.repo_url)
+    is_generation = task.task_type == "generation"
+
+    if is_generation:
+        # Generation tasks start from an empty directory; no git repo needed.
+        sample_repo = repos_dir  # dummy — not used by the generation verifier
+    else:
+        sample_repo = repo_dir(repos_dir, task.repo_url)
+
     with tempfile.TemporaryDirectory(prefix="kmp_eval_") as tmpdir:
         project_copy = Path(tmpdir) / "project"
 
-        # 1. Extract project at parent commit
-        _extract_at_sha(sample_repo, task.parent_sha, project_copy)
+        # 1. Extract project at parent commit (skipped for generation tasks)
+        if is_generation:
+            project_copy.mkdir(parents=True, exist_ok=True)
+        else:
+            _extract_at_sha(sample_repo, task.parent_sha, project_copy)
 
         # 2. Optional extra setup
         if task.setup:
@@ -195,7 +207,7 @@ async def run_task_once(
         else:
             verification = task.verify(project_copy, sample_repo)
 
-        # 6. LLM judge (only when agent ran without error)
+        # 6. LLM judge
         judge: JudgeResult
         if error or skip_judge:
             judge = JudgeResult(
@@ -212,6 +224,7 @@ async def run_task_once(
                 build_passed=build_passed,
                 verify_score=verification.score,
                 verification_details=verification.details,
+                generation_url=task.generation_url,
             )
 
         # 7. Overall pass (judge is informational — does not affect passed)

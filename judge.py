@@ -18,10 +18,13 @@ This makes parsing reliable regardless of how Junie formats its console output.
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import re
 import subprocess
 import tempfile
+import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +39,12 @@ _MAX_LINES      = 60   # cap each expected/actual block at this many lines
 _JUDGE_TIMEOUT  = 120  # seconds
 
 _VERDICT_FILENAME = "kmp_eval_judge_verdict.txt"
+
+_BINARY_SUFFIXES = frozenset({
+    ".jar", ".class", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
+    ".keystore", ".jks", ".p12", ".aar", ".so", ".dylib", ".dll", ".exe",
+    ".zip", ".tar", ".gz",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -103,10 +112,14 @@ async def run_judge(
     build_passed: bool | None = None,
     verify_score: float | None = None,
     verification_details: list[str] | None = None,
+    generation_url: str = "",
 ) -> JudgeResult:
     """
     Ask the Junie CLI to compare the agent's implementation against the expected
-    commit output and return a verdict on functional equivalence.
+    output and return a verdict on functional equivalence.
+
+    For commit tasks, compares against the git diff at commit_sha.
+    For generation tasks, compares against the reference zip at generation_url.
 
     Junie is instructed to write its verdict to a temp file; we read that file
     after Junie exits rather than parsing its free-form stdout.
@@ -115,45 +128,111 @@ async def run_judge(
     if not api_key:
         return JudgeResult(verdict="skipped", reasoning="JUNIE_API_KEY not set", output="")
 
-    # Get the list of files changed in the expected commit
-    try:
-        changed = _git_diff_status(sample_repo, parent_sha, commit_sha)
-    except subprocess.CalledProcessError as exc:
-        return JudgeResult(verdict="error", reasoning=f"git diff failed: {exc}", output="")
-
-    # Build file comparison sections
     file_sections: list[str] = []
-    for status, path in changed[:_MAX_FILES]:
-        if status.startswith("D"):
-            agent_has = (project_dir / path).exists()
-            file_sections.append(
-                f"FILE: {path}\n"
-                f"Expected: DELETED\n"
-                f"Agent: {'incorrectly kept' if agent_has else 'correctly deleted'}"
-            )
-        else:
-            expected = _git_show(sample_repo, commit_sha, path)
-            if not expected:
-                continue    # binary or unavailable
-            actual = _read(project_dir / path)
-            if not actual:
-                actual = "(file not created by agent)"
-            tag = "[NEW] " if status.startswith("A") else ""
-            file_sections.append(
-                f"{tag}FILE: {path}\n\n"
-                f"=== EXPECTED (original commit) ===\n"
-                f"{_truncate(expected, _MAX_LINES)}\n\n"
-                f"=== AGENT IMPLEMENTATION ===\n"
-                f"{_truncate(actual, _MAX_LINES)}"
-            )
+    skipped_note = ""
 
-    if not file_sections:
-        return JudgeResult(verdict="skipped", reasoning="No text files to compare", output="")
+    if generation_url:
+        # Generation task: compare agent output against the reference zip
+        try:
+            with urllib.request.urlopen(generation_url, timeout=60) as resp:  # noqa: S310
+                zip_bytes = resp.read()
+        except Exception as exc:
+            return JudgeResult(verdict="error", reasoning=f"Failed to download reference zip: {exc}", output="")
 
-    skipped_note = (
-        f"\n\n({len(changed) - _MAX_FILES} additional files not shown)"
-        if len(changed) > _MAX_FILES else ""
-    )
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                members = [m for m in zf.infolist() if not m.is_dir()]
+                all_names = [m.filename for m in members]
+                prefix = ""
+                if all_names:
+                    first_parts = [n.split("/")[0] for n in all_names if "/" in n]
+                    if first_parts and all(p == first_parts[0] for p in first_parts):
+                        prefix = first_parts[0] + "/"
+
+                # Collect non-binary files, preferring Kotlin source files
+                text_members: list[tuple[object, str]] = []
+                for member in members:
+                    rel = member.filename[len(prefix):]
+                    if not rel:
+                        continue
+                    if Path(rel).suffix.lower() in _BINARY_SUFFIXES:
+                        continue
+                    text_members.append((member, rel))
+
+                text_members.sort(key=lambda x: (0 if x[1].endswith((".kt", ".kts")) else 1, x[1]))
+
+                for member, rel in text_members[:_MAX_FILES]:
+                    try:
+                        expected = zf.read(member).decode("utf-8")
+                    except (UnicodeDecodeError, KeyError):
+                        continue
+                    actual = _read(project_dir / rel)
+                    if not actual:
+                        actual = "(file not created by agent)"
+                    file_sections.append(
+                        f"FILE: {rel}\n\n"
+                        f"=== REFERENCE ===\n"
+                        f"{_truncate(expected, _MAX_LINES)}\n\n"
+                        f"=== AGENT IMPLEMENTATION ===\n"
+                        f"{_truncate(actual, _MAX_LINES)}"
+                    )
+
+                if len(text_members) > _MAX_FILES:
+                    skipped_note = f"\n\n({len(text_members) - _MAX_FILES} additional files not shown)"
+        except zipfile.BadZipFile as exc:
+            return JudgeResult(verdict="error", reasoning=f"Bad reference zip: {exc}", output="")
+
+        if not file_sections:
+            return JudgeResult(verdict="skipped", reasoning="No text files to compare in reference zip", output="")
+
+        reference_label = "reference project"
+        task_framing = (
+            "Does the agent's generated project correctly complete the task and "
+            "would it function the same way as the reference project?"
+        )
+
+    else:
+        # Commit task: compare against the git diff at commit_sha
+        try:
+            changed = _git_diff_status(sample_repo, parent_sha, commit_sha)
+        except subprocess.CalledProcessError as exc:
+            return JudgeResult(verdict="error", reasoning=f"git diff failed: {exc}", output="")
+
+        for status, path in changed[:_MAX_FILES]:
+            if status.startswith("D"):
+                agent_has = (project_dir / path).exists()
+                file_sections.append(
+                    f"FILE: {path}\n"
+                    f"Expected: DELETED\n"
+                    f"Agent: {'incorrectly kept' if agent_has else 'correctly deleted'}"
+                )
+            else:
+                expected = _git_show(sample_repo, commit_sha, path)
+                if not expected:
+                    continue    # binary or unavailable
+                actual = _read(project_dir / path)
+                if not actual:
+                    actual = "(file not created by agent)"
+                tag = "[NEW] " if status.startswith("A") else ""
+                file_sections.append(
+                    f"{tag}FILE: {path}\n\n"
+                    f"=== EXPECTED (original commit) ===\n"
+                    f"{_truncate(expected, _MAX_LINES)}\n\n"
+                    f"=== AGENT IMPLEMENTATION ===\n"
+                    f"{_truncate(actual, _MAX_LINES)}"
+                )
+
+        if not file_sections:
+            return JudgeResult(verdict="skipped", reasoning="No text files to compare", output="")
+
+        if len(changed) > _MAX_FILES:
+            skipped_note = f"\n\n({len(changed) - _MAX_FILES} additional files not shown)"
+
+        reference_label = "expected commit"
+        task_framing = (
+            "Does the agent's implementation correctly complete the task and would it "
+            "function the same way as the expected commit?"
+        )
 
     # Use a temp dir as Junie's working directory so it has a clean place to
     # write the verdict file without touching the sample repo or project copy.
@@ -183,8 +262,8 @@ async def run_judge(
 
         prompt = (
             "You are an expert Kotlin Multiplatform code reviewer. "
-            "Your only job is to compare an AI agent's implementation against the "
-            "expected commit code and judge whether the agent's version would work "
+            f"Your only job is to compare an AI agent's implementation against the "
+            f"{reference_label} and judge whether the agent's version would work "
             "the same way functionally. "
             "Focus only on functional correctness — ignore style, formatting, and "
             "cosmetic differences.\n\n"
@@ -194,8 +273,7 @@ async def run_judge(
             + "\n\n---\n\n".join(file_sections)
             + skipped_note
             + "\n\n---\n\n"
-            "Does the agent's implementation correctly complete the task and would it "
-            "function the same way as the expected commit?\n\n"
+            + task_framing + "\n\n"
             f"Write your verdict to the file: {verdict_file}\n"
             "The file must contain exactly two lines and nothing else:\n"
             "VERDICT: yes|partial|no\n"
