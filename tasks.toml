@@ -1,21 +1,36 @@
 # KMP Tasks Eval — task definitions
 #
-# Each [[tasks]] entry maps to one git commit from a KMP sample repo.
-# The agent starts at parent_sha and must reproduce the changes in commit_sha.
+# Two task types are supported:
 #
-# Fields
-# ------
+#   type = "commit"  (default)
+#     The agent starts at parent_sha and must reproduce the changes in commit_sha.
+#
+#   type = "generation"
+#     The agent starts with an empty directory and must generate a project from
+#     scratch.  The reference is downloaded at runtime from generation_url (a
+#     zip archive, e.g. from the KMP Wizard backend).
+#
+# Common fields
+# -------------
 # id             unique slug used as --tasks filter
 # name           human-readable label
-# category       Managing Dependencies | Building | Testing | Optimizing | Distributing | Maintaining
-# parent_sha     full SHA the agent's project is extracted from
-# commit_sha     short SHA the agent must reproduce
+# category       Managing Dependencies | Building | Testing | Optimizing | Distributing | Maintaining | Generating
 # prompt         task description given to the agent
-# run_build      whether to run the JVM build step after the agent (default: true)
+# run_build      whether to run the JVM build step after the agent (default: true for commit, false for generation)
 # build_task     Gradle task for JVM compile check (default: :app:shared:compileKotlinJvm)
-# repo_url       git repo to clone/extract from (default: https://github.com/JetBrains/kotlinconf-app)
 # min_similarity line-level similarity threshold per file (default: 0.70)
 # skip_patterns  list of path substrings to exclude from verification (default: [])
+#
+# Commit task fields
+# ------------------
+# parent_sha     full SHA the agent's project is extracted from
+# commit_sha     short SHA the agent must reproduce
+# repo_url       git repo to clone/extract from (default: https://github.com/JetBrains/kotlinconf-app)
+#
+# Generation task fields
+# ----------------------
+# type           must be "generation"
+# generation_url URL that returns a zip of the reference project (e.g. KMP Wizard)
 
 [[tasks]]
 id          = "update-deps"
@@ -597,3 +612,50 @@ and Deb (Linux). Set the main class to the desktop entry point.
 with the JVM Koin module (Coil image loader wired for JVM).
 4. Create sharedUi/src/jvmMain/kotlin/com/example/jetcaster/ui/player/PlayerScreenDisplayStrategy.kt \
 as the JVM-specific implementation of the player display strategy."""
+
+# ---------------------------------------------------------------------------
+# Generation tasks — agent must create a project from scratch
+# ---------------------------------------------------------------------------
+
+[[tasks]]
+id             = "generate-kmp-project"
+name           = "Generate a full KMP project from scratch"
+category       = "Generating"
+type           = "generation"
+generation_url = "https://kmp.jetbrains.com/generateKmtProject?name=KotlinProject&id=org.example.project&spec=%7B%22template_id%22%3A%22kmt%22%2C%22targets%22%3A%7B%22android%22%3A%7B%22ui%22%3A%5B%22compose%22%5D%7D%2C%22ios%22%3A%7B%22ui%22%3A%5B%22compose%22%5D%7D%2C%22desktop%22%3A%7B%22ui%22%3A%5B%22compose%22%5D%7D%2C%22web%22%3A%7B%22ui%22%3A%5B%22compose%22%5D%7D%2C%22server%22%3A%7B%22engine%22%3A%5B%22ktor%22%5D%7D%7D%2C%22include_tests%22%3Atrue%7D"
+run_build      = true
+min_similarity = 0.50
+skip_patterns  = [
+    "\\.gradle/",       # Gradle cache directories
+    "^build/",          # Compiled output
+    "\\.idea/",         # IDE project files
+    "gradle-wrapper\\.jar",   # Binary Gradle wrapper jar
+    "\\.DS_Store",
+]
+prompt = """
+Create a new Kotlin Multiplatform project from scratch.
+
+Project details:
+- Name: KotlinProject
+- Application ID / package: org.example.project
+
+The project should support the following platforms using Compose Multiplatform for the UI:
+- Android
+- iOS
+- Desktop (JVM)
+- Web (Kotlin/Wasm)
+
+It should also include a server module using Ktor.
+
+Technical requirements:
+- Use Gradle with Kotlin DSL (.kts files) for all build scripts
+- Use a Gradle version catalog at gradle/libs.versions.toml for dependency management
+- Include unit tests
+- Place the shared multiplatform UI code in a module named "composeApp"
+- Place the server code in a module named "server"
+- Include all required configuration: settings.gradle.kts, root build.gradle.kts, \
+per-module build.gradle.kts files, gradle wrapper (gradlew, gradlew.bat, \
+gradle/wrapper/gradle-wrapper.properties), and .gitignore
+
+Generate all files directly in the current working directory (do not create a subdirectory).
+"""

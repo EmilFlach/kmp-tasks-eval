@@ -233,11 +233,13 @@ async def async_main() -> int:
             return 1
         selected_tasks = [TASKS_BY_ID[tid] for tid in args.tasks]
 
-    # Validate that each required repo is present
+    # Validate that each required repo is present (generation tasks have no repo)
     if not args.dry_run:
         missing = []
         seen: set[str] = set()
         for task in selected_tasks:
+            if not task.repo_url:  # generation tasks need no local repo
+                continue
             if task.repo_url not in seen:
                 seen.add(task.repo_url)
                 repo_path = repo_dir(args.repos_dir, task.repo_url)
