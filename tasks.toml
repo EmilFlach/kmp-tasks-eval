@@ -41,11 +41,7 @@ commit_sha  = "0cf25cb"
 run_build   = true
 min_similarity = 0.85
 prompt = """
-Update the project dependencies in gradle/libs.versions.toml:
-- Kotlin: upgrade to 2.3.20
-- AndroidX Activity Compose: upgrade to 1.13.0
-- AndroidX Lifecycle: upgrade to 2.11.0-alpha01
-- AndroidX Navigation3: upgrade to 1.1.0-alpha04
+Update the project dependencies in gradle/libs.versions.toml to the latest versions
 Also remove the explicit `androidx.core.ktx` dependency from \
 app/shared/build.gradle.kts — it is now provided transitively."""
 
@@ -254,6 +250,7 @@ category    = "Building"
 parent_sha  = "f3b3da84e45b80ce6738a591db96e62db492be2b"
 commit_sha  = "a3d286a5"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.80
 prompt = """
 Compose Multiplatform resolves dark-mode resources by name suffix (`_dark`) rather \
@@ -277,6 +274,7 @@ category    = "Testing"
 parent_sha  = "031d8e06d7885455da9a2256213d727f245f88d1"
 commit_sha  = "b2ae14b4"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.70
 prompt = """
 Add JVM-runnable common tests that verify the storage migration logic, \
@@ -301,6 +299,7 @@ category    = "Optimizing"
 parent_sha  = "f82095c192ce7e238784c988c0709c504c819a08"
 commit_sha  = "a808608b"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.80
 prompt = """
 `collectAsState()` keeps collecting a StateFlow even when the app is in the \
@@ -346,6 +345,7 @@ category    = "Optimizing"
 parent_sha  = "9802ef1e501215301a42f12db92c896c79780ac0"
 commit_sha  = "79f2fa83"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.80
 prompt = """
 Enable Gradle Configuration Cache (GCC) and the local Build Cache to speed up \
@@ -370,6 +370,7 @@ category    = "Distributing"
 parent_sha  = "3316772d53b78f6309e14a98c835507deaa63de2"
 commit_sha  = "4fdcf4ac"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.55
 skip_patterns = ["CHANGELOG.md"]
 prompt = """
@@ -398,6 +399,7 @@ category    = "Maintaining"
 parent_sha  = "56453ad8257c01bb93496f17138eb1c7909f69c3"
 commit_sha  = "ff02e347"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.70
 prompt = """
 The current `MobileLogger` uses expect/actual and is not injectable. Refactor \
@@ -428,6 +430,7 @@ category    = "Maintaining"
 parent_sha  = "3316772d53b78f6309e14a98c835507deaa63de2"
 commit_sha  = "e5f2d9c4"
 run_build   = true
+build_task  = ":shared:compileKotlinJvm"
 min_similarity = 0.85
 prompt = """
 Compose ripple effects look out of place on iOS. Add a feature flag to \
